@@ -3,7 +3,7 @@ import re
 from billy.scrape import NoDataForPeriod
 from billy.scrape.legislators import LegislatorScraper, Legislator
 
-import lxml.etree
+import lxml.html
 
 
 class OHLegislatorScraper(LegislatorScraper):
@@ -25,9 +25,9 @@ class OHLegislatorScraper(LegislatorScraper):
                        'com_displaymembers/page.php?district=%d' % district)
 
             with self.urlopen(rep_url) as page:
-                root = lxml.etree.fromstring(page, lxml.etree.HTMLParser())
+                page = lxml.html.fromstring(page)
 
-                for el in root.xpath('//table[@class="page"]'):
+                for el in page.xpath('//table[@class="page"]'):
                     rep_link = el.xpath('tr/td/title')[0]
                     full_name = rep_link.text
                     party = full_name[-2]
@@ -45,11 +45,12 @@ class OHLegislatorScraper(LegislatorScraper):
                 self.save_legislator(leg)
 
     def scrape_senators(self, chamber, term):
-        sen_url = 'http://www.ohiosenate.gov/directory.html'
-        with self.urlopen(sen_url) as page:
-            root = lxml.etree.fromstring(page, lxml.etree.HTMLParser())
+        url = 'http://www.ohiosenate.gov/directory.html'
+        with self.urlopen(url) as page:
+            page = lxml.html.fromstring(page)
+            page.make_links_absolute(url)
 
-            for el in root.xpath('//table[@class="fullWidth"]/tr/td'):
+            for el in page.xpath('//table[@class="fullWidth"]/tr/td'):
                 sen_link = el.xpath('a[@class="senatorLN"]')[1]
 
                 full_name = sen_link.text
@@ -66,8 +67,15 @@ class OHLegislatorScraper(LegislatorScraper):
                 elif party == "R":
                     party = "Republican"
 
+                office_phone = el.xpath("b[text() = 'Phone']")[0].tail
+                office_phone = office_phone.strip(' :')
+
+                photo_url = el.xpath("a/img")[0].attrib['src']
+
                 leg = Legislator(term, chamber, district, full_name,
-                        '', '', '', party)
-                leg.add_source(sen_url)
+                                 '', '', '', party,
+                                 photo_url=photo_url,
+                                 office_phone=office_phone)
+                leg.add_source(url)
 
                 self.save_legislator(leg)
